@@ -28,14 +28,14 @@ cargo build --release   # 产物在 target/release/uva
 ## 命令
 
 | 命令 | 类比 |
-| --- | --- | --- |
+| --- | --- | 
 | `uva` | `yarn` |
 | `uva install` | `yarn add` |
 | `uva run [文件] [参数...]` | `yarn start ...` |
 | `uva start [文件] [参数...]` | 与 `uva run` 完全一样 |
+| `uva <文件> [参数...]` | 同上，与 `uva run` 完全一样 |
 | `uva add <包>... [--save]` | `yarn add <包>... [--save]` |
 | `uva remove <包>... [--save]` | `yarn remove <包>... [--save]` |
-| `uva <文件> [参数...]` | - |
 | `uva cn` | 一键切清华源用。 |
 | `uva unset-base-url` | 还原官方源。 |
 
