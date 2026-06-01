@@ -126,8 +126,11 @@ Windows、Linux、macOS 均受支持。CI（`.github/workflows/ci.yml`）在
 
 ## 发布（GitHub Releases）
 
-`.github/workflows/release.yml` 在推送 `v*` 标签时触发，在各原生 runner 上为以下目标
-构建 release 产物，并连同 `.sha256` 校验文件一起上传到对应标签的 Release：
+发布完全自动：**CI 自己创建 tag 和 Release**，无需手动打标签。
+
+`.github/workflows/release.yml` 在每次推送到 `main` 时运行——读取 `Cargo.toml` 里的
+版本号，若对应的 `v<版本>` 标签尚不存在，就在各原生 runner 上构建产物，并自动创建该
+标签与 Release（连同 `.sha256` 校验文件）：
 
 | 平台 | target | 产物 |
 | --- | --- | --- |
@@ -136,13 +139,15 @@ Windows、Linux、macOS 均受支持。CI（`.github/workflows/ci.yml`）在
 | macOS (Apple Silicon) | `aarch64-apple-darwin` | `uva-aarch64-apple-darwin.tar.gz` |
 | macOS (Intel) | `x86_64-apple-darwin` | `uva-x86_64-apple-darwin.tar.gz` |
 
-发布一个版本：
+**发布一个新版本** = 在 `Cargo.toml` 里把 `version` 改大，然后推到 `main`：
 
+```toml
+# Cargo.toml
+version = "0.1.1"   # 改这一行
 ```
-# 在 master 上打标签并推送，即触发 Release 工作流
-git tag v0.1.0
-git push origin v0.1.0
-```
+
+推送后 CI 会自动建出 `v0.1.1` 标签和 Release。版本没变的推送是幂等的（标签已存在则跳过，
+不会重复发布）。也可在 *Actions → Release → Run workflow* 手动触发，并可选填一个版本号覆盖。
 
 资产名不含版本号，因此 `install.ps1` 始终可用
 `releases/latest/download/uva-x86_64-pc-windows-msvc.zip` 这一固定地址拉取最新版。

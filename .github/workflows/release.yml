@@ -1,16 +1,61 @@
 name: Release
 
+# CI creates the tag and the GitHub Release automatically.
+#
+# How it works: on every push to `main`, the `check` job reads the version from
+# Cargo.toml. If no `v<version>` tag exists yet, the `build` job compiles the
+# binaries on each native runner and publishes a Release at tag `v<version>`
+# (the tag is created as part of publishing). Bumping the version in Cargo.toml
+# and pushing to main is therefore all it takes to cut a new release; pushing
+# again without a bump is a no-op.
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "覆盖版本号（留空则取 Cargo.toml 中的版本）"
+        required: false
 
 permissions:
-  contents: write # required to create the GitHub Release and upload assets
+  contents: write # required to create the tag, the Release, and upload assets
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
+  check:
+    name: Decide version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.decide.outputs.version }}
+      release: ${{ steps.decide.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: decide
+        shell: bash
+        run: |
+          input="${{ github.event.inputs.version }}"
+          if [ -n "$input" ]; then
+            version="${input#v}"   # tolerate a leading "v"
+          else
+            version=$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"(.*)".*/\1/')
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if git ls-remote --tags origin "refs/tags/v$version" | grep -q .; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Tag v$version already exists — nothing to release."
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Will release v$version."
+          fi
+
   build:
     name: ${{ matrix.target }}
+    needs: check
+    if: needs.check.outputs.release == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -63,10 +108,10 @@ jobs:
           shasum -a 256 "$asset" > "$asset.sha256"
           echo "ASSET=$asset" >> "$GITHUB_ENV"
 
-      - name: Upload to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Publish to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ needs.check.outputs.version }}
           files: |
             ${{ env.ASSET }}
             ${{ env.ASSET }}.sha256
