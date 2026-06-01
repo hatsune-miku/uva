@@ -21,7 +21,7 @@
     without downloading or modifying anything.
 
 .EXAMPLE
-    irm https://github.com/hatsune-miku/uva/raw/master/install.ps1 | iex
+    irm https://github.com/hatsune-miku/uva/raw/main/install.ps1 | iex
 
 .EXAMPLE
     .\install.ps1 -Version v0.1.0 -InstallDir C:\tools\uva

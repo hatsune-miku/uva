@@ -22,7 +22,7 @@ uva how-to-install-uv
 **Windows 一键安装（从 GitHub Releases 覆盖安装最新版）：**
 
 ```powershell
-irm https://github.com/hatsune-miku/uva/raw/master/install.ps1 | iex
+irm https://github.com/hatsune-miku/uva/raw/main/install.ps1 | iex
 ```
 
 会下载最新发行版、校验 SHA-256，并把 `uva.exe` 装进 `%LOCALAPPDATA%\uva\bin`
@@ -30,7 +30,7 @@ irm https://github.com/hatsune-miku/uva/raw/master/install.ps1 | iex
 
 ```powershell
 # 先下载脚本再带参运行
-irm https://github.com/hatsune-miku/uva/raw/master/install.ps1 -OutFile install.ps1
+irm https://github.com/hatsune-miku/uva/raw/main/install.ps1 -OutFile install.ps1
 .\install.ps1 -Version v0.1.0 -InstallDir C:\tools\uva
 .\install.ps1 -DryRun        # 只打印将要执行的操作，不下载
 ```
