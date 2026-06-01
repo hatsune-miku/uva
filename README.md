@@ -19,6 +19,27 @@ uva how-to-install-uv
 
 ## 安装 uva
 
+**Windows 一键安装（从 GitHub Releases 覆盖安装最新版）：**
+
+```powershell
+irm https://github.com/hatsune-miku/uva/raw/master/install.ps1 | iex
+```
+
+会下载最新发行版、校验 SHA-256，并把 `uva.exe` 装进 `%LOCALAPPDATA%\uva\bin`
+（自动加入用户 PATH，已存在则直接覆盖升级）。想装指定版本或自定义目录：
+
+```powershell
+# 先下载脚本再带参运行
+irm https://github.com/hatsune-miku/uva/raw/master/install.ps1 -OutFile install.ps1
+.\install.ps1 -Version v0.1.0 -InstallDir C:\tools\uva
+.\install.ps1 -DryRun        # 只打印将要执行的操作，不下载
+```
+
+**macOS / Linux：** 从 [Releases](https://github.com/hatsune-miku/uva/releases) 下载对应
+平台的 `uva-<target>.tar.gz`，解压后把 `uva` 放到 PATH 上即可。
+
+**从源码构建（任意平台）：**
+
 ```
 cargo install --path .
 # 或
@@ -95,12 +116,36 @@ uva unset-base-url      # 清除全局 uv.toml 的 [[index]] 设置
 
 ## 平台支持
 
-Windows、Linux、macOS 均受支持，CI 在 Windows 与 Linux 上同时构建与测试。
+Windows、Linux、macOS 均受支持。CI（`.github/workflows/ci.yml`）在
+`windows-latest`、`ubuntu-latest`、`macos-latest` 三个平台上同时构建、lint 与测试。
 
 - 全局 `uv.toml` 的位置按 uv 自身的规则解析：Windows 为 `%APPDATA%\uv\uv.toml`，
   macOS / Linux 为 `$XDG_CONFIG_HOME/uv/uv.toml`（否则 `~/.config/uv/uv.toml`）；
   若设置了 `UV_CONFIG_FILE`，则以它为准。**macOS 与 Linux 走同一套逻辑，无需特殊处理。**
 - 改写 `requirements.txt` / `uv.toml` 时会保留文件原有的换行风格（CRLF 或 LF）。
+
+## 发布（GitHub Releases）
+
+`.github/workflows/release.yml` 在推送 `v*` 标签时触发，在各原生 runner 上为以下目标
+构建 release 产物，并连同 `.sha256` 校验文件一起上传到对应标签的 Release：
+
+| 平台 | target | 产物 |
+| --- | --- | --- |
+| Windows | `x86_64-pc-windows-msvc` | `uva-x86_64-pc-windows-msvc.zip` |
+| Linux | `x86_64-unknown-linux-gnu` | `uva-x86_64-unknown-linux-gnu.tar.gz` |
+| macOS (Apple Silicon) | `aarch64-apple-darwin` | `uva-aarch64-apple-darwin.tar.gz` |
+| macOS (Intel) | `x86_64-apple-darwin` | `uva-x86_64-apple-darwin.tar.gz` |
+
+发布一个版本：
+
+```
+# 在 master 上打标签并推送，即触发 Release 工作流
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+资产名不含版本号，因此 `install.ps1` 始终可用
+`releases/latest/download/uva-x86_64-pc-windows-msvc.zip` 这一固定地址拉取最新版。
 
 ## 开发
 
