@@ -27,17 +27,16 @@ cargo build --release   # 产物在 target/release/uva
 
 ## 命令
 
-| 命令 | 类比 |
-| --- | --- | 
-| `uva` | `yarn` |
-| `uva install` | `yarn add` |
-| `uva run [文件] [参数...]` | `yarn start ...` |
-| `uva start [文件] [参数...]` | 与 `uva run` 完全一样 |
-| `uva <文件> [参数...]` | 同上，与 `uva run` 完全一样 |
-| `uva add <包>... [--save]` | `yarn add <包>... [--save]` |
-| `uva remove <包>... [--save]` | `yarn remove <包>... [--save]` |
-| `uva cn` | 一键切清华源用。 |
-| `uva unset-base-url` | 还原官方源。 |
+| 命令 | 类比 | 作用 |
+| --- | --- | --- | 
+| `uva` | `yarn` (`yarn install`) | 装依赖 |
+| `uva run [文件] [参数...]` | `yarn start ...` | 运行 |
+| `uva start [文件] [参数...]` | 与 `uva run` 完全一样 | 运行 |
+| `uva <文件> [参数...]` | 同上，与 `uva run` 完全一样 | 运行 |
+| `uva add <包>... [--save]` | `yarn add <包>... [--save]` | 装包 |
+| `uva remove <包>... [--save]` | `yarn remove <包>... [--save]` | 卸包 |
+| `uva cn` | - | 一键全局切清华源 |
+| `uva unset-base-url` | - | 一键全局恢复官方源 |
 
 ### `uva run` 的默认入口查找
 
