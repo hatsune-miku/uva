@@ -1,0 +1,14 @@
+[package]
+name = "uva"
+version = "0.1.0"
+edition = "2021"
+description = "uv advanced — a yarn-like wrapper around uv"
+license = "MIT"
+repository = "https://github.com/hatsune-miku/uva"
+
+[[bin]]
+name = "uva"
+path = "src/main.rs"
+
+[dev-dependencies]
+tempfile = "3"
