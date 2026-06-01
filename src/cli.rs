@@ -7,7 +7,7 @@ use std::path::Path;
 pub const UV_INSTALL_URL: &str = "https://docs.astral.sh/uv/getting-started/installation/";
 
 pub const USAGE: &str = "\
-uva — uv advanced（让 Python 拥有 yarn 般的体验）
+uva — uv automations（让 Python 拥有 yarn 般的体验）
 
 用法:
   uva                        安装依赖（等同于 uva install）
@@ -17,6 +17,8 @@ uva — uv advanced（让 Python 拥有 yarn 般的体验）
   uva add <包>... [--save]    安装包到当前环境；加 --save 时写入 pyproject.toml / requirements.txt
   uva remove <包>... [--save]  从当前环境卸载包；加 --save 时从 pyproject.toml / requirements.txt 移除
   uva <文件> [参数...]         若文件存在，等同于 uva run <文件>
+  uva cn                     一键全局切清华源（写入全局 uv.toml）
+  uva unset-base-url         清除全局 uv.toml 的 [[index]] 设置
   uva how-to-install-uv      输出 uv 的安装地址
   uva --help                 显示本帮助
   uva --version              显示版本
@@ -42,6 +44,8 @@ pub fn dispatch(args: &[String], dir: &Path) -> Plan {
                 let (packages, save) = parse_packages(rest);
                 detect::remove_plan(dir, &packages, save)
             }
+            "cn" => Plan::Steps(vec![crate::plan::Step::SetGlobalIndex]),
+            "unset-base-url" => Plan::Steps(vec![crate::plan::Step::ClearGlobalIndex]),
             "how-to-install-uv" => Plan::PrintUrl,
             "--help" | "-h" => Plan::Help,
             "--version" | "-V" => Plan::Version,
@@ -98,20 +102,29 @@ mod tests {
     fn no_args_is_install() {
         let dir = tempdir().unwrap();
         fs::write(dir.path().join("pyproject.toml"), "").unwrap();
-        assert_eq!(dispatch(&[], dir.path()), Plan::uv(vec![UvCmd::new(["sync"])]));
+        assert_eq!(
+            dispatch(&[], dir.path()),
+            Plan::uv(vec![UvCmd::new(["sync"])])
+        );
     }
 
     #[test]
     fn install_keyword() {
         let dir = tempdir().unwrap();
         fs::write(dir.path().join("pyproject.toml"), "").unwrap();
-        assert_eq!(dispatch(&s(&["install"]), dir.path()), Plan::uv(vec![UvCmd::new(["sync"])]));
+        assert_eq!(
+            dispatch(&s(&["install"]), dir.path()),
+            Plan::uv(vec![UvCmd::new(["sync"])])
+        );
     }
 
     #[test]
     fn how_to_install_uv() {
         let dir = tempdir().unwrap();
-        assert_eq!(dispatch(&s(&["how-to-install-uv"]), dir.path()), Plan::PrintUrl);
+        assert_eq!(
+            dispatch(&s(&["how-to-install-uv"]), dir.path()),
+            Plan::PrintUrl
+        );
     }
 
     #[test]
@@ -178,7 +191,10 @@ mod tests {
     fn add_parses_comma_space_and_save() {
         let dir = tempdir().unwrap(); // no pyproject → requirements path
         assert_eq!(
-            dispatch(&s(&["add", "requests,flask", "numpy", "--save"]), dir.path()),
+            dispatch(
+                &s(&["add", "requests,flask", "numpy", "--save"]),
+                dir.path()
+            ),
             Plan::Steps(vec![
                 Step::Uv(UvCmd::new(["venv"]).only_if_venv_missing()),
                 Step::Uv(UvCmd::new(["pip", "install", "requests", "flask", "numpy"])),
@@ -213,7 +229,10 @@ mod tests {
     fn add_no_packages_fails() {
         let dir = tempdir().unwrap();
         assert!(matches!(dispatch(&s(&["add"]), dir.path()), Plan::Fail(_)));
-        assert!(matches!(dispatch(&s(&["add", "--save"]), dir.path()), Plan::Fail(_)));
+        assert!(matches!(
+            dispatch(&s(&["add", "--save"]), dir.path()),
+            Plan::Fail(_)
+        ));
     }
 
     #[test]
@@ -232,6 +251,24 @@ mod tests {
         assert_eq!(
             dispatch(&s(&["remove", "flask", "--save"]), dir.path()),
             Plan::uv(vec![UvCmd::new(["remove", "flask"])])
+        );
+    }
+
+    #[test]
+    fn cn_sets_global_index() {
+        let dir = tempdir().unwrap();
+        assert_eq!(
+            dispatch(&s(&["cn"]), dir.path()),
+            Plan::Steps(vec![Step::SetGlobalIndex])
+        );
+    }
+
+    #[test]
+    fn unset_base_url_clears_global_index() {
+        let dir = tempdir().unwrap();
+        assert_eq!(
+            dispatch(&s(&["unset-base-url"]), dir.path()),
+            Plan::Steps(vec![Step::ClearGlobalIndex])
         );
     }
 }

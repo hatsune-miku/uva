@@ -27,10 +27,7 @@ pub fn run_plan(dir: &Path, filename: Option<&str>, extra: &[String]) -> Plan {
         None => match resolve_default_script(dir) {
             Ok(f) => f,
             Err(attempts) => {
-                return Plan::Fail(format!(
-                    "未指定源文件。已尝试过：{}",
-                    attempts.join("、")
-                ));
+                return Plan::Fail(format!("未指定源文件。已尝试过：{}", attempts.join("、")));
             }
         },
     };
@@ -159,14 +156,20 @@ mod tests {
     fn install_prefers_uv_lock() {
         let dir = tempdir().unwrap();
         fs::write(dir.path().join("uv.lock"), "").unwrap();
-        assert_eq!(install_plan(dir.path()), Plan::uv(vec![UvCmd::new(["sync"])]));
+        assert_eq!(
+            install_plan(dir.path()),
+            Plan::uv(vec![UvCmd::new(["sync"])])
+        );
     }
 
     #[test]
     fn install_uses_pyproject() {
         let dir = tempdir().unwrap();
         fs::write(dir.path().join("pyproject.toml"), "").unwrap();
-        assert_eq!(install_plan(dir.path()), Plan::uv(vec![UvCmd::new(["sync"])]));
+        assert_eq!(
+            install_plan(dir.path()),
+            Plan::uv(vec![UvCmd::new(["sync"])])
+        );
     }
 
     #[test]
@@ -204,7 +207,10 @@ mod tests {
         fs::write(dir.path().join("a.py"), "").unwrap();
         fs::write(dir.path().join("b.py"), "").unwrap();
         fs::write(dir.path().join("main.py"), "").unwrap();
-        assert_eq!(resolve_default_script(dir.path()), Ok("main.py".to_string()));
+        assert_eq!(
+            resolve_default_script(dir.path()),
+            Ok("main.py".to_string())
+        );
     }
 
     #[test]
@@ -212,7 +218,10 @@ mod tests {
         let dir = tempdir().unwrap();
         fs::create_dir(dir.path().join("src")).unwrap();
         fs::write(dir.path().join("src/server.py"), "").unwrap();
-        assert_eq!(resolve_default_script(dir.path()), Ok("src/server.py".to_string()));
+        assert_eq!(
+            resolve_default_script(dir.path()),
+            Ok("src/server.py".to_string())
+        );
     }
 
     #[test]
@@ -221,7 +230,10 @@ mod tests {
         fs::create_dir(dir.path().join("src")).unwrap();
         fs::write(dir.path().join("src/a.py"), "").unwrap();
         fs::write(dir.path().join("src/main.py"), "").unwrap();
-        assert_eq!(resolve_default_script(dir.path()), Ok("src/main.py".to_string()));
+        assert_eq!(
+            resolve_default_script(dir.path()),
+            Ok("src/main.py".to_string())
+        );
     }
 
     #[test]

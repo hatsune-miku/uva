@@ -1,4 +1,4 @@
-# uva (uv advanced) — Design Spec
+# uva (uv automations) — Design Spec
 
 **Date:** 2026-06-01
 **Status:** Approved (ready for implementation)

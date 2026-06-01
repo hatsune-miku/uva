@@ -1,8 +1,10 @@
 mod cli;
+mod config;
 mod detect;
 mod plan;
 mod reqs;
 mod runner;
+mod text;
 
 use std::path::PathBuf;
 use std::process::exit;

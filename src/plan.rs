@@ -34,6 +34,10 @@ pub enum Step {
     AppendRequirements(Vec<String>),
     /// Remove any `requirements.txt` lines matching these package names.
     RemoveRequirements(Vec<String>),
+    /// Set the global `uv.toml` index to the Tsinghua mirror.
+    SetGlobalIndex,
+    /// Remove `[[index]]` sections from the global `uv.toml`.
+    ClearGlobalIndex,
 }
 
 /// Whether a `uv` command should run, depending on whether `.venv` exists.

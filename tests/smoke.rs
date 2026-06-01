@@ -17,7 +17,11 @@ fn how_to_install_uv_prints_url() {
 #[test]
 fn install_outside_python_project_fails() {
     let dir = tempfile::tempdir().unwrap();
-    let out = uva().arg("install").current_dir(dir.path()).output().unwrap();
+    let out = uva()
+        .arg("install")
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("Python"));
 }
@@ -45,9 +49,48 @@ fn add_without_packages_fails() {
 #[test]
 fn remove_without_packages_fails() {
     let dir = tempfile::tempdir().unwrap();
-    let out = uva().arg("remove").current_dir(dir.path()).output().unwrap();
+    let out = uva()
+        .arg("remove")
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
     assert_eq!(out.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&out.stderr).contains("包"));
+}
+
+#[test]
+fn cn_and_unset_edit_global_uv_toml() {
+    // Redirect the config dir via env so we never touch the real ~/.config or
+    // %APPDATA%. The binary resolves APPDATA (Windows) or XDG_CONFIG_HOME/HOME.
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = dir.path();
+    let toml = cfg.join("uv").join("uv.toml");
+
+    let cn = uva()
+        .arg("cn")
+        .env_remove("UV_CONFIG_FILE")
+        .env("APPDATA", cfg)
+        .env("XDG_CONFIG_HOME", cfg)
+        .env("HOME", cfg)
+        .output()
+        .unwrap();
+    assert!(cn.status.success());
+    let written = std::fs::read_to_string(&toml).unwrap();
+    assert!(written.contains("https://pypi.tuna.tsinghua.edu.cn/simple"));
+    assert!(written.contains("default = true"));
+
+    let unset = uva()
+        .arg("unset-base-url")
+        .env_remove("UV_CONFIG_FILE")
+        .env("APPDATA", cfg)
+        .env("XDG_CONFIG_HOME", cfg)
+        .env("HOME", cfg)
+        .output()
+        .unwrap();
+    assert!(unset.status.success());
+    let after = std::fs::read_to_string(&toml).unwrap();
+    assert!(!after.contains("[[index]]"));
+    assert!(!after.contains("tsinghua"));
 }
 
 /// Real end-to-end run through uv. Ignored by default because it may make uv

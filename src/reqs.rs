@@ -61,13 +61,14 @@ pub fn append(content: &str, packages: &[String]) -> String {
     if additions.is_empty() {
         return content.to_string();
     }
+    let nl = crate::text::newline(content);
     let mut out = content.to_string();
     if !out.is_empty() && !out.ends_with('\n') {
-        out.push('\n');
+        out.push_str(nl);
     }
     for line in additions {
         out.push_str(&line);
-        out.push('\n');
+        out.push_str(nl);
     }
     out
 }
@@ -80,6 +81,7 @@ pub fn remove(content: &str, packages: &[String]) -> String {
     if targets.is_empty() {
         return content.to_string();
     }
+    let nl = crate::text::newline(content);
     let had_trailing_newline = content.ends_with('\n');
     let kept: Vec<&str> = content
         .lines()
@@ -88,9 +90,9 @@ pub fn remove(content: &str, packages: &[String]) -> String {
             None => true,
         })
         .collect();
-    let mut out = kept.join("\n");
+    let mut out = kept.join(nl);
     if had_trailing_newline && !out.is_empty() {
-        out.push('\n');
+        out.push_str(nl);
     }
     out
 }
@@ -106,11 +108,23 @@ mod tests {
     #[test]
     fn normalize_basic_and_versions() {
         assert_eq!(normalize_name("Flask==2.0"), Some("flask".to_string()));
-        assert_eq!(normalize_name("requests>=2,<3"), Some("requests".to_string()));
+        assert_eq!(
+            normalize_name("requests>=2,<3"),
+            Some("requests".to_string())
+        );
         assert_eq!(normalize_name("my_pkg"), Some("my-pkg".to_string()));
-        assert_eq!(normalize_name("ruamel.yaml"), Some("ruamel-yaml".to_string()));
-        assert_eq!(normalize_name("requests[security]"), Some("requests".to_string()));
-        assert_eq!(normalize_name("foo >= 1 ; python_version < '3'"), Some("foo".to_string()));
+        assert_eq!(
+            normalize_name("ruamel.yaml"),
+            Some("ruamel-yaml".to_string())
+        );
+        assert_eq!(
+            normalize_name("requests[security]"),
+            Some("requests".to_string())
+        );
+        assert_eq!(
+            normalize_name("foo >= 1 ; python_version < '3'"),
+            Some("foo".to_string())
+        );
     }
 
     #[test]
@@ -120,7 +134,10 @@ mod tests {
         assert_eq!(normalize_name("# a comment"), None);
         assert_eq!(normalize_name("-r other.txt"), None);
         assert_eq!(normalize_name("--hash=sha256:abc"), None);
-        assert_eq!(normalize_name("flask  # web framework"), Some("flask".to_string()));
+        assert_eq!(
+            normalize_name("flask  # web framework"),
+            Some("flask".to_string())
+        );
     }
 
     #[test]
@@ -153,5 +170,21 @@ mod tests {
     #[test]
     fn remove_no_match_is_unchanged() {
         assert_eq!(remove("requests\n", &v(&["flask"])), "requests\n");
+    }
+
+    #[test]
+    fn append_preserves_crlf() {
+        assert_eq!(
+            append("requests\r\n", &v(&["flask"])),
+            "requests\r\nflask\r\n"
+        );
+    }
+
+    #[test]
+    fn remove_preserves_crlf() {
+        assert_eq!(
+            remove("requests\r\nflask\r\n", &v(&["flask"])),
+            "requests\r\n"
+        );
     }
 }
