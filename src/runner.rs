@@ -38,7 +38,7 @@ pub fn execute(plan: Plan) -> i32 {
 }
 
 fn run_steps(steps: Vec<Step>) -> i32 {
-    let needs_uv = steps.iter().any(|s| matches!(s, Step::Uv(_)));
+    let needs_uv = steps.iter().any(step_needs_uv);
     if needs_uv && !uv_available() {
         eprintln!("uva: 未找到 uv。请先安装 uv：{}", UV_INSTALL_URL);
         return 1;
@@ -50,12 +50,25 @@ fn run_steps(steps: Vec<Step>) -> i32 {
             Step::RemoveRequirements(pkgs) => edit_requirements(&pkgs, false),
             Step::SetGlobalIndex => set_global_index(),
             Step::ClearGlobalIndex => clear_global_index(),
+            Step::GlobalAdd(pkgs) => global_pip(&pkgs, true),
+            Step::GlobalRemove(pkgs) => global_pip(&pkgs, false),
+            Step::Repl => repl(),
         };
         if code != 0 {
             return code;
         }
     }
     0
+}
+
+/// Whether a step shells out to `uv` (and therefore needs it on PATH).
+/// `Repl` is excluded: it only needs `uv` when it has to create the global
+/// venv, which it checks for itself.
+fn step_needs_uv(step: &Step) -> bool {
+    matches!(
+        step,
+        Step::Uv(_) | Step::GlobalAdd(_) | Step::GlobalRemove(_)
+    )
 }
 
 fn run_uv(cmd: &UvCmd) -> i32 {
@@ -178,6 +191,141 @@ fn global_uv_toml() -> Option<PathBuf> {
                 .map(|h| PathBuf::from(h).join(".config").join("uv").join("uv.toml")),
         }
     }
+}
+
+// --- Global environment (`uva add -g`, `uva remove -g`, `uva repl`) -------
+//
+// uva keeps one shared "global" venv. `-g` installs into it, and `uva repl`
+// launches its Python, so packages added with `-g` are importable in the REPL.
+
+/// Install or uninstall packages in the global venv via `uv pip`.
+fn global_pip(packages: &[String], install: bool) -> i32 {
+    let dir = match global_venv_dir() {
+        Some(d) => d,
+        None => {
+            eprintln!("uva: 无法确定全局环境位置（缺少 LOCALAPPDATA / HOME / XDG_DATA_HOME）");
+            return 1;
+        }
+    };
+    if install {
+        if let Err(code) = ensure_global_venv(&dir) {
+            return code;
+        }
+    } else if !dir.join("pyvenv.cfg").is_file() {
+        // Nothing installed globally yet — nothing to remove.
+        eprintln!("# 全局环境不存在，无需卸载。");
+        return 0;
+    }
+
+    let sub = if install { "install" } else { "uninstall" };
+    let mut args = vec![
+        "pip".to_string(),
+        sub.to_string(),
+        "--python".to_string(),
+        dir.to_string_lossy().into_owned(),
+    ];
+    args.extend(packages.iter().cloned());
+    eprintln!("$ uv {}", args.join(" "));
+    match Command::new("uv").args(&args).status() {
+        Ok(status) => status.code().unwrap_or(1),
+        Err(e) => {
+            eprintln!("uva: 无法执行 uv: {}", e);
+            1
+        }
+    }
+}
+
+/// Launch an interactive Python REPL outside a project: use the local `.venv`
+/// if one exists (e.g. a requirements.txt project), else uva's global venv.
+/// (Inside a pyproject/uv.lock project, dispatch routes to `uv run python`
+/// instead, so this is only reached outside such projects.)
+fn repl() -> i32 {
+    let local = Path::new(".venv");
+    let dir = if local.is_dir() {
+        local.to_path_buf()
+    } else {
+        if !uv_available() {
+            eprintln!("uva: 未找到 uv。请先安装 uv：{}", UV_INSTALL_URL);
+            return 1;
+        }
+        let g = match global_venv_dir() {
+            Some(d) => d,
+            None => {
+                eprintln!("uva: 无法确定全局环境位置（缺少 LOCALAPPDATA / HOME / XDG_DATA_HOME）");
+                return 1;
+            }
+        };
+        if let Err(code) = ensure_global_venv(&g) {
+            return code;
+        }
+        g
+    };
+    let py = match venv_python(&dir) {
+        Some(p) => p,
+        None => {
+            eprintln!("uva: 未在 {} 找到 python 解释器", dir.display());
+            return 1;
+        }
+    };
+    eprintln!("$ {}", py.display());
+    match Command::new(&py).status() {
+        Ok(status) => status.code().unwrap_or(0),
+        Err(e) => {
+            eprintln!("uva: 无法启动 Python: {}", e);
+            1
+        }
+    }
+}
+
+/// Create the global venv with `uv venv <dir>` if it doesn't exist yet.
+fn ensure_global_venv(dir: &Path) -> Result<(), i32> {
+    if dir.join("pyvenv.cfg").is_file() {
+        return Ok(());
+    }
+    if let Some(parent) = dir.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    eprintln!("$ uv venv {}", dir.display());
+    match Command::new("uv").arg("venv").arg(dir).status() {
+        Ok(status) if status.success() => Ok(()),
+        Ok(status) => Err(status.code().unwrap_or(1)),
+        Err(e) => {
+            eprintln!("uva: 无法执行 uv: {}", e);
+            Err(1)
+        }
+    }
+}
+
+/// Path to uva's global venv: `%LOCALAPPDATA%\uva\venv` on Windows, else
+/// `$XDG_DATA_HOME/uva/venv` (falling back to `$HOME/.local/share/uva/venv`).
+fn global_venv_dir() -> Option<PathBuf> {
+    if cfg!(windows) {
+        std::env::var_os("LOCALAPPDATA").map(|p| PathBuf::from(p).join("uva").join("venv"))
+    } else {
+        match std::env::var_os("XDG_DATA_HOME") {
+            Some(x) if !x.is_empty() => Some(PathBuf::from(x).join("uva").join("venv")),
+            _ => std::env::var_os("HOME").map(|h| {
+                PathBuf::from(h)
+                    .join(".local")
+                    .join("share")
+                    .join("uva")
+                    .join("venv")
+            }),
+        }
+    }
+}
+
+/// Locate a venv's Python interpreter (works for any venv directory).
+fn venv_python(dir: &Path) -> Option<PathBuf> {
+    let candidates = if cfg!(windows) {
+        vec![dir.join("Scripts").join("python.exe")]
+    } else {
+        vec![
+            dir.join("bin").join("python3"),
+            dir.join("bin").join("python"),
+        ]
+    };
+    candidates.into_iter().find(|p| p.is_file())
 }
 
 /// Whether `uv` is resolvable on PATH.

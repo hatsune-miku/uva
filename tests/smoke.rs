@@ -1,4 +1,5 @@
-use std::process::Command;
+use std::io::Write;
+use std::process::{Command, Stdio};
 
 fn uva() -> Command {
     Command::new(env!("CARGO_BIN_EXE_uva"))
@@ -134,4 +135,46 @@ fn add_then_remove_save_roundtrip_requirements() {
         .unwrap();
     assert!(remove.status.success());
     assert!(!std::fs::read_to_string(&req).unwrap().contains("six"));
+}
+
+/// Real `uva add -g` then `uva repl` must be able to import the global package.
+/// Ignored by default (network/uv). Run with `cargo test -- --ignored`.
+/// Redirects the global-venv dir via env so the real one is never touched.
+#[test]
+#[ignore]
+fn add_g_then_repl_can_import() {
+    let dir = tempfile::tempdir().unwrap();
+    let envs = |c: &mut Command| {
+        c.env("LOCALAPPDATA", dir.path())
+            .env("XDG_DATA_HOME", dir.path())
+            .env("HOME", dir.path());
+    };
+
+    // Run in a clean, non-project CWD so `uva repl` resolves to the global env
+    // (not a stray pyproject/.venv from the test runner's directory).
+    let cwd = tempfile::tempdir().unwrap();
+
+    let mut add = uva();
+    add.args(["add", "-g", "six"]).current_dir(cwd.path());
+    envs(&mut add);
+    assert!(add.output().unwrap().status.success());
+
+    // Pipe an import into the REPL's stdin to confirm it uses the global venv.
+    let mut repl = uva();
+    repl.arg("repl")
+        .current_dir(cwd.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    envs(&mut repl);
+    let mut child = repl.spawn().unwrap();
+    {
+        let mut stdin = child.stdin.take().unwrap();
+        stdin
+            .write_all(b"import six; print('REPL_IMPORT_OK', six.__version__)\n")
+            .unwrap();
+    } // drop stdin → EOF so Python exits
+    let out = child.wait_with_output().unwrap();
+    assert!(out.status.success());
+    assert!(String::from_utf8_lossy(&out.stdout).contains("REPL_IMPORT_OK"));
 }

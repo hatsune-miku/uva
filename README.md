@@ -66,9 +66,10 @@ cargo build --release   # 产物在 target/release/uva
 | `uva` | `yarn` (`yarn install`) | 装依赖 |
 | `uva run [文件] [参数...]` | `yarn start ...` | 运行 |
 | `uva start [文件] [参数...]` | 与 `uva run` 完全一样 | 运行 |
+| `uva repl` | `node` | 启动 Python REPL（项目环境优先，否则全局） |
 | `uva <文件> [参数...]` | 同上，与 `uva run` 完全一样 | 运行 |
-| `uva add <包>... [--save]` | `yarn add <包>... [--save]` | 装包 |
-| `uva remove <包>... [--save]` | `yarn remove <包>... [--save]` | 卸包 |
+| `uva add <包>... [-g\|--save]` | `yarn add <包>... [-g]` | 装包（`-g` 装到全局） |
+| `uva remove <包>... [-g\|--save]` | `yarn remove <包>... [-g]` | 卸包（`-g` 从全局卸） |
 | `uva cn` | - | 一键全局切清华源 |
 | `uva unset-base-url` | - | 一键全局恢复官方源 |
 
@@ -96,6 +97,36 @@ uva add requests flask
 # 装依赖并写入依赖文件
 uva add requests flask --save 
 ```
+
+### `uva repl`（按上下文选环境，类似 `node`）
+
+`uva repl` 会按你所在的位置选择 Python 环境，就像在项目目录里跑 `node` 会用本地
+`node_modules` 一样：
+
+- **在项目里**（有 `pyproject.toml` / `uv.lock`）→ 跑 `uv run python`，REPL 能直接
+  `import` 该项目的依赖（必要时自动同步）。
+- **只有本地 `.venv`**（例如 requirements.txt 项目，已 `uva install` 过）→ 用该 `.venv`。
+- **不在任何项目里** → 用 uva 的**全局环境**（见下）。
+
+### `uva add -g`（全局环境）
+
+uva 维护一个**全局 Python 环境**（venv）。`uva add -g` 把包装进它，在项目外运行
+`uva repl` 时即可直接 `import`：
+
+```bash
+cd ~                       # 不在任何项目里
+uva add -g requests        # 装到全局环境
+uva repl                   # 全局 REPL
+>>> import requests        # 直接可用
+uva remove -g requests     # 从全局环境卸载
+```
+
+全局环境位置：Windows 为 `%LOCALAPPDATA%\uva\venv`，macOS/Linux 为
+`$XDG_DATA_HOME/uva/venv`（默认 `~/.local/share/uva/venv`），首次使用时自动创建。
+`-g` 优先于 `--save`，且不依赖当前目录是否为项目。
+
+> 说明：这里的 `-g` 是「全局**可导入**的库」，比 npm 的 `-g`（只装**命令行工具**、
+> 不可 `require`）更贴近 Python/pip 的习惯；而 `uva repl` 选环境的方式则与 `node` 一致。
 
 ### `uva cn`：一键全局切清华源
 

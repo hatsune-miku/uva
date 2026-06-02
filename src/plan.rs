@@ -38,6 +38,12 @@ pub enum Step {
     SetGlobalIndex,
     /// Remove `[[index]]` sections from the global `uv.toml`.
     ClearGlobalIndex,
+    /// Install packages into uva's global venv (`uva add -g`).
+    GlobalAdd(Vec<String>),
+    /// Uninstall packages from uva's global venv (`uva remove -g`).
+    GlobalRemove(Vec<String>),
+    /// Launch a Python REPL in uva's global venv (`uva repl`).
+    Repl,
 }
 
 /// Whether a `uv` command should run, depending on whether `.venv` exists.

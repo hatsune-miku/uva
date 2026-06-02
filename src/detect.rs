@@ -37,12 +37,16 @@ pub fn run_plan(dir: &Path, filename: Option<&str>, extra: &[String]) -> Plan {
 }
 
 /// Build the `add` plan: install packages into the environment, optionally
-/// persisting them. With `--save` and a `pyproject.toml`, defer to `uv add`;
-/// otherwise `uv pip install` into `.venv` (and append to `requirements.txt`
-/// when saving).
-pub fn add_plan(dir: &Path, packages: &[String], save: bool) -> Plan {
+/// persisting them. With `-g`, install into uva's global venv; otherwise with
+/// `--save` and a `pyproject.toml`, defer to `uv add`; otherwise `uv pip
+/// install` into `.venv` (and append to `requirements.txt` when saving).
+pub fn add_plan(dir: &Path, packages: &[String], save: bool, global: bool) -> Plan {
     if packages.is_empty() {
         return Plan::Fail("请指定要添加的包，例如：uva add requests".to_string());
+    }
+
+    if global {
+        return Plan::Steps(vec![Step::GlobalAdd(packages.to_vec())]);
     }
 
     if save && dir.join("pyproject.toml").is_file() {
@@ -60,11 +64,16 @@ pub fn add_plan(dir: &Path, packages: &[String], save: bool) -> Plan {
 }
 
 /// Build the `remove` plan: uninstall packages, optionally persisting the
-/// removal. With `--save` and a `pyproject.toml`, defer to `uv remove`;
-/// otherwise edit `requirements.txt` (when saving) and `uv pip uninstall`.
-pub fn remove_plan(dir: &Path, packages: &[String], save: bool) -> Plan {
+/// removal. With `-g`, uninstall from uva's global venv; otherwise with
+/// `--save` and a `pyproject.toml`, defer to `uv remove`; otherwise edit
+/// `requirements.txt` (when saving) and `uv pip uninstall`.
+pub fn remove_plan(dir: &Path, packages: &[String], save: bool, global: bool) -> Plan {
     if packages.is_empty() {
         return Plan::Fail("请指定要移除的包，例如：uva remove requests".to_string());
+    }
+
+    if global {
+        return Plan::Steps(vec![Step::GlobalRemove(packages.to_vec())]);
     }
 
     if save && dir.join("pyproject.toml").is_file() {
@@ -81,6 +90,18 @@ pub fn remove_plan(dir: &Path, packages: &[String], save: bool) -> Plan {
         ])
     } else {
         Plan::uv(vec![uninstall])
+    }
+}
+
+/// Build the `repl` plan. In a project (pyproject.toml / uv.lock present), run
+/// `uv run python` so the REPL imports the project's own dependencies; outside
+/// a project, fall back to uva's global env (handled by `Step::Repl`, which
+/// uses a local `.venv` if one exists, else the global venv).
+pub fn repl_plan(dir: &Path) -> Plan {
+    if dir.join("pyproject.toml").is_file() || dir.join("uv.lock").is_file() {
+        Plan::uv(vec![UvCmd::new(["run", "python"])])
+    } else {
+        Plan::Steps(vec![Step::Repl])
     }
 }
 
@@ -267,15 +288,25 @@ mod tests {
     #[test]
     fn add_no_packages_fails() {
         let dir = tempdir().unwrap();
-        assert!(matches!(add_plan(dir.path(), &[], false), Plan::Fail(_)));
-        assert!(matches!(add_plan(dir.path(), &[], true), Plan::Fail(_)));
+        assert!(matches!(
+            add_plan(dir.path(), &[], false, false),
+            Plan::Fail(_)
+        ));
+        assert!(matches!(
+            add_plan(dir.path(), &[], true, false),
+            Plan::Fail(_)
+        ));
+        assert!(matches!(
+            add_plan(dir.path(), &[], false, true),
+            Plan::Fail(_)
+        ));
     }
 
     #[test]
     fn add_temporary_installs_into_venv() {
         let dir = tempdir().unwrap();
         assert_eq!(
-            add_plan(dir.path(), &pkgs(&["flask"]), false),
+            add_plan(dir.path(), &pkgs(&["flask"]), false, false),
             Plan::Steps(vec![
                 Step::Uv(UvCmd::new(["venv"]).only_if_venv_missing()),
                 Step::Uv(UvCmd::new(["pip", "install", "flask"])),
@@ -288,7 +319,7 @@ mod tests {
         let dir = tempdir().unwrap();
         fs::write(dir.path().join("pyproject.toml"), "").unwrap();
         assert_eq!(
-            add_plan(dir.path(), &pkgs(&["flask", "requests"]), true),
+            add_plan(dir.path(), &pkgs(&["flask", "requests"]), true, false),
             Plan::uv(vec![UvCmd::new(["add", "flask", "requests"])])
         );
     }
@@ -298,7 +329,7 @@ mod tests {
         let dir = tempdir().unwrap();
         fs::write(dir.path().join("requirements.txt"), "").unwrap();
         assert_eq!(
-            add_plan(dir.path(), &pkgs(&["flask"]), true),
+            add_plan(dir.path(), &pkgs(&["flask"]), true, false),
             Plan::Steps(vec![
                 Step::Uv(UvCmd::new(["venv"]).only_if_venv_missing()),
                 Step::Uv(UvCmd::new(["pip", "install", "flask"])),
@@ -308,16 +339,30 @@ mod tests {
     }
 
     #[test]
+    fn add_global_installs_into_global_venv() {
+        let dir = tempdir().unwrap();
+        // `-g` wins over `--save` and ignores any pyproject.toml.
+        fs::write(dir.path().join("pyproject.toml"), "").unwrap();
+        assert_eq!(
+            add_plan(dir.path(), &pkgs(&["flask", "requests"]), true, true),
+            Plan::Steps(vec![Step::GlobalAdd(pkgs(&["flask", "requests"]))])
+        );
+    }
+
+    #[test]
     fn remove_no_packages_fails() {
         let dir = tempdir().unwrap();
-        assert!(matches!(remove_plan(dir.path(), &[], false), Plan::Fail(_)));
+        assert!(matches!(
+            remove_plan(dir.path(), &[], false, false),
+            Plan::Fail(_)
+        ));
     }
 
     #[test]
     fn remove_temporary_uninstalls() {
         let dir = tempdir().unwrap();
         assert_eq!(
-            remove_plan(dir.path(), &pkgs(&["flask"]), false),
+            remove_plan(dir.path(), &pkgs(&["flask"]), false, false),
             Plan::uv(vec![UvCmd::new(["pip", "uninstall", "flask"])])
         );
     }
@@ -327,7 +372,7 @@ mod tests {
         let dir = tempdir().unwrap();
         fs::write(dir.path().join("pyproject.toml"), "").unwrap();
         assert_eq!(
-            remove_plan(dir.path(), &pkgs(&["flask"]), true),
+            remove_plan(dir.path(), &pkgs(&["flask"]), true, false),
             Plan::uv(vec![UvCmd::new(["remove", "flask"])])
         );
     }
@@ -337,11 +382,43 @@ mod tests {
         let dir = tempdir().unwrap();
         fs::write(dir.path().join("requirements.txt"), "").unwrap();
         assert_eq!(
-            remove_plan(dir.path(), &pkgs(&["flask"]), true),
+            remove_plan(dir.path(), &pkgs(&["flask"]), true, false),
             Plan::Steps(vec![
                 Step::RemoveRequirements(pkgs(&["flask"])),
                 Step::Uv(UvCmd::new(["pip", "uninstall", "flask"]).only_if_venv_present()),
             ])
         );
+    }
+
+    #[test]
+    fn remove_global_uninstalls_from_global_venv() {
+        let dir = tempdir().unwrap();
+        assert_eq!(
+            remove_plan(dir.path(), &pkgs(&["flask"]), false, true),
+            Plan::Steps(vec![Step::GlobalRemove(pkgs(&["flask"]))])
+        );
+    }
+
+    #[test]
+    fn repl_in_project_uses_uv_run_python() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("pyproject.toml"), "").unwrap();
+        assert_eq!(
+            repl_plan(dir.path()),
+            Plan::uv(vec![UvCmd::new(["run", "python"])])
+        );
+
+        let dir2 = tempdir().unwrap();
+        fs::write(dir2.path().join("uv.lock"), "").unwrap();
+        assert_eq!(
+            repl_plan(dir2.path()),
+            Plan::uv(vec![UvCmd::new(["run", "python"])])
+        );
+    }
+
+    #[test]
+    fn repl_outside_project_uses_global() {
+        let dir = tempdir().unwrap();
+        assert_eq!(repl_plan(dir.path()), Plan::Steps(vec![Step::Repl]));
     }
 }
