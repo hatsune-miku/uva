@@ -35,8 +35,21 @@ irm https://github.com/hatsune-miku/uva/raw/main/install.ps1 -OutFile install.ps
 .\install.ps1 -DryRun        # 只打印将要执行的操作，不下载
 ```
 
-**macOS / Linux：** 从 [Releases](https://github.com/hatsune-miku/uva/releases) 下载对应
-平台的 `uva-<target>.tar.gz`，解压后把 `uva` 放到 PATH 上即可。
+**macOS / Linux 一键安装：**
+
+```sh
+curl -fsSL https://github.com/hatsune-miku/uva/raw/main/install.sh | sh
+```
+
+会自动识别平台（x86_64 / arm64）、下载最新发行版、校验 SHA-256，并把 `uva` 装进
+`~/.local/bin`（已存在则覆盖升级；不在 PATH 时写入对应 shell 的 profile）。带参运行：
+
+```sh
+# 指定版本 / 目录
+curl -fsSL https://github.com/hatsune-miku/uva/raw/main/install.sh | sh -s -- --version v0.1.0
+UVA_INSTALL_DIR=~/bin sh install.sh           # 也支持环境变量
+sh install.sh --dry-run                       # 只打印将要执行的操作
+```
 
 **从源码构建（任意平台）：**
 
@@ -135,7 +148,8 @@ Windows、Linux、macOS 均受支持。CI（`.github/workflows/ci.yml`）在
 | 平台 | target | 产物 |
 | --- | --- | --- |
 | Windows | `x86_64-pc-windows-msvc` | `uva-x86_64-pc-windows-msvc.zip` |
-| Linux | `x86_64-unknown-linux-gnu` | `uva-x86_64-unknown-linux-gnu.tar.gz` |
+| Linux (x86_64) | `x86_64-unknown-linux-gnu` | `uva-x86_64-unknown-linux-gnu.tar.gz` |
+| Linux (ARM64) | `aarch64-unknown-linux-gnu` | `uva-aarch64-unknown-linux-gnu.tar.gz` |
 | macOS (Apple Silicon) | `aarch64-apple-darwin` | `uva-aarch64-apple-darwin.tar.gz` |
 | macOS (Intel) | `x86_64-apple-darwin` | `uva-x86_64-apple-darwin.tar.gz` |
 
