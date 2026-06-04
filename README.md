@@ -172,9 +172,9 @@ Windows、Linux、macOS 均受支持。CI（`.github/workflows/ci.yml`）在
 
 发布完全自动：**CI 自己创建 tag 和 Release**，无需手动打标签。
 
-`.github/workflows/release.yml` 在每次推送到 `main` 时运行——读取 `Cargo.toml` 里的
-版本号，若对应的 `v<版本>` 标签尚不存在，就在各原生 runner 上构建产物，并自动创建该
-标签与 Release（连同 `.sha256` 校验文件）：
+`.github/workflows/release.yml` 在每次推送到 `main` 时运行——先在各原生 runner 上
+构建所有产物，**全部成功后**再读取 `Cargo.toml` 里的版本号发布 Release（连同 `.sha256`
+校验文件）：
 
 | 平台 | target | 产物 |
 | --- | --- | --- |
@@ -191,11 +191,16 @@ Windows、Linux、macOS 均受支持。CI（`.github/workflows/ci.yml`）在
 version = "0.1.1"   # 改这一行
 ```
 
-推送后 CI 会自动建出 `v0.1.1` 标签和 Release。版本没变的推送是幂等的（标签已存在则跳过，
-不会重复发布）。也可在 *Actions → Release → Run workflow* 手动触发，并可选填一个版本号覆盖。
+推送后 CI 会自动建出 `v0.1.1` 标签和 Release。
 
-资产名不含版本号，因此 `install.ps1` 始终可用
-`releases/latest/download/uva-x86_64-pc-windows-msvc.zip` 这一固定地址拉取最新版。
+**同版本重新打包会覆盖**：如果推送时 `version` 没变（`v<版本>` 已存在），CI 会先
+**删除旧的 Release 和 tag，再用当前提交重新构建发布**——所以二进制产物会被最新构建覆盖，
+tag 也指向最新提交。这正是“改了代码但没升版本号、想刷新 `latest` 产物”时想要的行为。
+（也可在 *Actions → Release → Run workflow* 手动触发，并可选填一个版本号覆盖。）
+
+资产名不含版本号，因此 `install.ps1` / `install.sh` 始终可用
+`releases/latest/download/uva-<target>.{zip,tar.gz}` 这一固定地址拉取最新版——
+配合上面的覆盖逻辑，重装脚本总能拿到最新构建。
 
 ## 开发
 

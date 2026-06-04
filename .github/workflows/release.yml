@@ -1,13 +1,15 @@
 name: Release
 
-# CI creates the tag and the GitHub Release automatically.
+# CI builds the binaries and publishes the GitHub Release automatically.
 #
-# How it works: on every push to `main`, the `check` job reads the version from
-# Cargo.toml. If no `v<version>` tag exists yet, the `build` job compiles the
-# binaries on each native runner and publishes a Release at tag `v<version>`
-# (the tag is created as part of publishing). Bumping the version in Cargo.toml
-# and pushing to main is therefore all it takes to cut a new release; pushing
-# again without a bump is a no-op.
+# Trigger: every push to `main` (or manual dispatch). The version comes from
+# Cargo.toml (or the dispatch input). Behavior:
+#   - new version  → a fresh `v<version>` Release is created.
+#   - same version → the existing `v<version>` Release and tag are DELETED and
+#     recreated from the current commit, so its binaries are overwritten.
+# Builds run first; the Release is only touched after every target succeeds, so
+# a failing build never destroys an existing Release. Asset names carry no
+# version, so `install.ps1`/`install.sh` can always pull `latest/download/...`.
 on:
   push:
     branches: [main]
@@ -18,44 +20,15 @@ on:
         required: false
 
 permissions:
-  contents: write # required to create the tag, the Release, and upload assets
+  contents: write # required to create/delete the tag and Release, upload assets
 
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
-  check:
-    name: Decide version
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.decide.outputs.version }}
-      release: ${{ steps.decide.outputs.release }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - id: decide
-        shell: bash
-        run: |
-          input="${{ github.event.inputs.version }}"
-          if [ -n "$input" ]; then
-            version="${input#v}"   # tolerate a leading "v"
-          else
-            version=$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"(.*)".*/\1/')
-          fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          if git ls-remote --tags origin "refs/tags/v$version" | grep -q .; then
-            echo "release=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Tag v$version already exists — nothing to release."
-          else
-            echo "release=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::Will release v$version."
-          fi
-
   build:
     name: ${{ matrix.target }}
-    needs: check
-    if: needs.check.outputs.release == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -109,7 +82,6 @@ jobs:
           Compress-Archive -Path $bin -DestinationPath $asset -Force
           $hash = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLower()
           "$hash  $asset" | Out-File "$asset.sha256" -Encoding ascii -NoNewline
-          "ASSET=$asset" | Out-File $env:GITHUB_ENV -Append -Encoding ascii
 
       - name: Package (Unix, tar.gz)
         if: matrix.archive == 'tar.gz'
@@ -118,14 +90,58 @@ jobs:
           asset="uva-${{ matrix.target }}.tar.gz"
           tar -czf "$asset" -C "target/${{ matrix.target }}/release" "uva${{ matrix.ext }}"
           shasum -a 256 "$asset" > "$asset.sha256"
-          echo "ASSET=$asset" >> "$GITHUB_ENV"
 
-      - name: Publish to GitHub Release
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.target }}
+          path: |
+            uva-*.zip
+            uva-*.tar.gz
+            uva-*.sha256
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: v
+        shell: bash
+        run: |
+          input="${{ github.event.inputs.version }}"
+          if [ -n "$input" ]; then
+            version="${input#v}" # tolerate a leading "v"
+          else
+            version=$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"(.*)".*/\1/')
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Collect built assets
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Overwrite existing release (same version → delete + recreate)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::notice::v$VERSION already exists — deleting to overwrite."
+            gh release delete "v$VERSION" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
+          else
+            echo "::notice::v$VERSION is new."
+          fi
+
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ needs.check.outputs.version }}
-          files: |
-            ${{ env.ASSET }}
-            ${{ env.ASSET }}.sha256
+          tag_name: v${{ steps.v.outputs.version }}
+          files: dist/*
           generate_release_notes: true
           fail_on_unmatched_files: true
